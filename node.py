@@ -75,7 +75,7 @@ def get_classes(label):
             if l == value:
                 result.append(value)
                 break
-    return result
+    return result          
 
 
 def get_classes2(label):
@@ -104,7 +104,7 @@ def plot_boxes_to_image(image_pil, tgt):
 
     # Get the current file path and use it to create a relative path to the font file
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    font_path = os.path.join(current_file_path, "docs", "PingFang Regular.ttf")
+    font_path = os.path.join(current_file_path, "docs", "PingFangRegular.ttf")
     font_size = 20
     font = ImageFont.truetype(font_path, font_size)
 
@@ -180,6 +180,69 @@ def plot_boxes_to_image(image_pil, tgt):
     return res_image, res_mask, labelme_data
 
 
+class EasyOCRforText:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "gpu": (
+                    "BOOLEAN",
+                    {"default": True},
+                ),
+                "language_name": (
+                    "STRING",
+                    {"default": "ch_sim,en", "multiline": False},
+                ),
+            },
+        }
+
+    CATEGORY = "ComfyUI-EasyOCR"
+    FUNCTION = "main"
+    RETURN_TYPES = ("STRING","STRING")
+    RETURN_NAMES = ("result","text")
+
+    def main(self, image, gpu, language_name):
+        res_all = []
+
+        for item in image:
+            image_pil = Image.fromarray(np.clip(255.0 * item.cpu().numpy(), 0, 255).astype(np.uint8)).convert("RGB")
+
+            language = None
+            language = get_classes(language_name)
+
+            if not language:
+                return
+
+            model_storage_directory = os.path.join(folder_paths.models_dir, model_dir_name)
+            if not os.path.exists(model_storage_directory):
+                os.makedirs(model_storage_directory)
+
+            print("language ",language)
+
+            reader  = easyocr.Reader(language, model_storage_directory=model_storage_directory,gpu=gpu)
+            result = reader.readtext(np.array(image_pil))
+
+            print("result ",result)
+
+            texts_list = []
+            for item in result:
+                bbox, text, confidence = item
+                texts_list.append(text)
+            combined_text = "".join(texts_list)
+
+            print(f" : {texts_list}")
+            print(f" : {combined_text}")
+
+            res_all.append(result)
+
+
+        return (
+            res_all,
+            combined_text
+        )
+
+
 class ApplyEasyOCR:
     @classmethod
     def INPUT_TYPES(cls):
@@ -231,8 +294,12 @@ class ApplyEasyOCR:
             if not os.path.exists(model_storage_directory):
                 os.makedirs(model_storage_directory)
 
+            print("language ",language)
+
             reader  = easyocr.Reader(language, model_storage_directory=model_storage_directory,gpu=gpu)
             result = reader.readtext(np.array(image_pil))
+
+            print("result ",result)
 
             size = image_pil.size
             pred_dict = {
