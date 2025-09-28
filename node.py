@@ -179,6 +179,64 @@ def plot_boxes_to_image(image_pil, tgt):
 
     return res_image, res_mask, labelme_data
 
+class EasyOCRdrawRectangle:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "start_x": ("INT",),
+                "start_y": ("INT",),
+                "end_x": ("INT",),
+                "end_y": ("INT",),
+                "is_fill": (
+                    "BOOLEAN",
+                    {"default": False},
+                ),
+                "line_width": ("INT", {"default": 10, "min": 0, "max": 100},),
+                "R": ("INT", {"default": 0, "min": 0, "max": 255},),
+                "G": ("INT", {"default": 0, "min": 0, "max": 255},),
+                "B": ("INT", {"default": 0, "min": 0, "max": 255},),
+            },
+        }
+
+    CATEGORY = "ComfyUI-EasyOCR"
+    FUNCTION = "main"
+    RETURN_TYPES = ("IMAGE",)
+
+    def main(self, image, start_x, start_y, end_x, end_y, is_fill, line_width, R, G, B):
+        one_image = image.squeeze(0).cpu().clone()
+    
+        image_pil = Image.fromarray(np.clip(255.0 * one_image.cpu().numpy(), 0, 255).astype(np.uint8)).convert("RGB")
+        
+        # Create a Draw object
+        draw = ImageDraw.Draw(image_pil)
+
+        # Define the coordinates for the rectangle (top-left x, top-left y, bottom-right x, bottom-right y)
+        rectangle_coords = (start_x, start_y, end_x, end_y)
+
+        line_width = line_width
+
+        box_color = (R, G, B)
+        
+        if is_fill:
+            draw.rectangle(rectangle_coords, fill=box_color)
+        else:
+            draw.rectangle(rectangle_coords, outline=box_color, width=line_width)
+        
+        # Convert the PIL image back to a numpy array
+        image_with_boxes = np.array(image_pil)
+
+        # Convert the modified image to a torch tensor
+        image_with_boxes_tensor = torch.from_numpy(
+            image_with_boxes.astype(np.float32) / 255.0
+        )
+        image_with_boxes_tensor = torch.unsqueeze(image_with_boxes_tensor, 0)
+        
+        return (
+            image_with_boxes_tensor,
+        )
+
 
 class EasyOCRforText:
     @classmethod
