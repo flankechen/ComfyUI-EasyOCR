@@ -7,6 +7,8 @@ import logging
 import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
+import math
+import comfy.utils
 
 
 logger = logging.getLogger("ComfyUI-EasyOCR")
@@ -236,6 +238,54 @@ class EasyOCRdrawRectangle:
         return (
             image_with_boxes_tensor,
         )
+    
+class EasyOCRImageResizeToTotalAndKeepRatio:
+    upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
+    crop_methods = ["disabled", "center"]
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { "image": ("IMAGE",), "upscale_method": (s.upscale_methods,),
+                              "megapixels": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 16.0, "step": 0.01}),
+                            }}
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "upscale"
+
+    CATEGORY = "image/upscaling"
+
+    def upscale(self, image, upscale_method, megapixels):
+        samples = image.movedim(-1, 1)
+
+        total = int(megapixels * 1024 * 1024)
+
+        orig_h = samples.shape[2]
+        orig_w = samples.shape[3]
+
+        if orig_w <= 0 or orig_h <= 0:
+            raise ValueError("invalid image dimensions")
+
+        # °Ñ¿í¸ß±È»¯¼òÎª×î¼òÕûÊý±È a:b
+        g = math.gcd(orig_w, orig_h)
+        a = orig_w // g
+        b = orig_h // g
+
+        # ¼ÆËã×îÐ¡µÄÕûÊý t£¬Ê¹µÃ (a*t)*(b*t) >= total
+        denom = a * b
+        # ·ÀÖ¹³ýÒÔ 0£¨ÀíÂÛÉÏ denom>0£¬ÒòÎª a,b >=1£©
+        t = max(1, math.ceil(math.sqrt(total / denom)))
+
+        new_w = a * t
+        new_h = b * t
+
+        # float Îó²î»ò¼«¶ËÇé¿öÔÙ¼ì²éÒ»´Î£¨Í¨³£²»ÐèÒª£¬µ«±£ÏÕ£©
+        while new_w * new_h < total:
+            t += 1
+            new_w = a * t
+            new_h = b * t
+
+        s = comfy.utils.common_upscale(samples, new_w, new_h, upscale_method, "disabled")
+        s = s.movedim(1, -1)
+        return (s,)
 
 
 class EasyOCRforText:
